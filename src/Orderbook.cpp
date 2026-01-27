@@ -311,3 +311,51 @@ void Orderbook::clearOrderRecord(OrderId orderId)
 {
     orders_.erase(orderId);
 }
+
+bool Orderbook::GetBestBid(Price& price, Quantity& qty) const
+{
+    if (bids_.empty()) {
+        price = 0;
+        qty = 0;
+        return false;
+    }
+    const auto& level = *bids_.begin();
+    price = level.first;
+    qty = 0;
+    for (const auto& ord : level.second) {
+        qty += ord->getQuantity();
+    }
+    return qty > 0;
+}
+
+bool Orderbook::GetBestAsk(Price& price, Quantity& qty) const
+{
+    if (asks_.empty()) {
+        price = 0;
+        qty = 0;
+        return false;
+    }
+    const auto& level = *asks_.begin();
+    price = level.first;
+    qty = 0;
+    for (const auto& ord : level.second) {
+        qty += ord->getQuantity();
+    }
+    return qty > 0;
+}
+
+bool Orderbook::GetBestBidAsk(Price& bidPrice, Quantity& bidQty,
+                              Price& askPrice, Quantity& askQty) const
+{
+    bool hasBid = GetBestBid(bidPrice, bidQty);
+    bool hasAsk = GetBestAsk(askPrice, askQty);
+    if (!hasBid) {
+        bidPrice = 0;
+        bidQty = 0;
+    }
+    if (!hasAsk) {
+        askPrice = 0;
+        askQty = 0;
+    }
+    return hasBid || hasAsk;
+}

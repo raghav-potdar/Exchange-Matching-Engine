@@ -113,6 +113,25 @@ public:
      */
     void ClearRecentTrades() { trades.clear(); }
 
+    /**
+     * @brief Get current best bid price/qty.
+     * @return true if a bid exists, false if book is empty on bid side.
+     */
+    bool GetBestBid(Price& price, Quantity& qty) const;
+
+    /**
+     * @brief Get current best ask price/qty.
+     * @return true if an ask exists, false if book is empty on ask side.
+     */
+    bool GetBestAsk(Price& price, Quantity& qty) const;
+
+    /**
+     * @brief Convenience to fetch both best bid/ask.
+     * @return true if at least one side exists.
+     */
+    bool GetBestBidAsk(Price& bidPrice, Quantity& bidQty,
+                       Price& askPrice, Quantity& askQty) const;
+
 private:
     /**
      * @struct LevelData

@@ -399,7 +399,7 @@ void MatchingEngine::publishTradeUpdate(const Orderbook::Trade& trade, BuySell a
 void MatchingEngine::publishTickUpdate() {
     Price bidPrice = 0, askPrice = 0;
     Quantity bidQty = 0, askQty = 0;
-    getBestBidAsk(bidPrice, bidQty, askPrice, askQty);
+    orderbook_.GetBestBidAsk(bidPrice, bidQty, askPrice, askQty);
     
     MarketDataMessage msg;
     msg.type = MessageType::TICK_UPDATE;
@@ -422,11 +422,5 @@ void MatchingEngine::publishTickUpdate() {
 
 void MatchingEngine::getBestBidAsk(Price& bidPrice, Quantity& bidQty, 
                                     Price& askPrice, Quantity& askQty) {
-    // This is a simplified implementation - ideally the Orderbook would expose this
-    // For now, we'll just report zeros if we can't get the data
-    // TODO: Add getBestBid/getBestAsk methods to Orderbook class
-    bidPrice = 0;
-    bidQty = 0;
-    askPrice = 0;
-    askQty = 0;
+    orderbook_.GetBestBidAsk(bidPrice, bidQty, askPrice, askQty);
 }
