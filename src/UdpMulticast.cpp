@@ -34,8 +34,9 @@ bool UdpMulticast::initialize() {
         return false;
     }
     
-    // Disable loopback (optional - set to 1 to receive own packets)
-    unsigned char loopback = 0;
+    // Enable loopback so clients on the same host can receive multicast.
+    // If you want to disable local loopback in the future, make this configurable.
+    unsigned char loopback = 1;
     if (setsockopt(socketFd_, IPPROTO_IP, IP_MULTICAST_LOOP, &loopback, sizeof(loopback)) < 0) {
         std::cerr << "Failed to set multicast loopback: " << strerror(errno) << std::endl;
         // Non-fatal, continue
