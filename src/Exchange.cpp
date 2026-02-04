@@ -19,8 +19,8 @@ Exchange::Exchange(const ExchangeConfiguration& config)
     // Create session manager
     sessionManager_ = std::make_unique<SessionManager>(*inboundQueue_, *outboundQueue_);
     
-    // Create ZMQ server
-    zmqServer_ = std::make_unique<ZmqServer>(config_.zmqPort, *sessionManager_);
+    // Create FIX TCP server
+    fixServer_ = std::make_unique<FixTcpServer>(config_.fixPort, *sessionManager_);
     
     // Create matching engine
     matchingEngine_ = std::make_unique<MatchingEngine>(
@@ -28,7 +28,13 @@ Exchange::Exchange(const ExchangeConfiguration& config)
     
     // Create feed handler
     feedHandler_ = std::make_unique<FeedHandler>(
-        *feedQueue_, config_.multicastGroup, config_.multicastPort, config_.symbol);
+        *feedQueue_,
+        config_.multicastGroup,
+        config_.multicastPort,
+        config_.symbol,
+        config_.publishFixMarketData,
+        config_.mdSenderCompId,
+        config_.mdTargetCompId);
     
     // Create dummy generator if enabled
     if (config_.enableDummyGenerator) {
@@ -58,7 +64,7 @@ bool Exchange::start() {
     std::cout << "      Starting Exchange" << std::endl;
     std::cout << "========================================" << std::endl;
     std::cout << "Symbol: " << config_.symbol << std::endl;
-    std::cout << "ZMQ Port: " << config_.zmqPort << " (ROUTER/DEALER)" << std::endl;
+    std::cout << "FIX TCP Port: " << config_.fixPort << std::endl;
     std::cout << "Multicast: " << config_.multicastGroup << ":" << config_.multicastPort << std::endl;
     std::cout << "Dummy Generator: " << (config_.enableDummyGenerator ? "Enabled" : "Disabled") << std::endl;
     std::cout << "========================================" << std::endl;
@@ -80,9 +86,9 @@ bool Exchange::start() {
         return false;
     }
     
-    // 3. Start ZMQ server
-    if (!zmqServer_->start()) {
-        std::cerr << "Failed to start ZMQ Server" << std::endl;
+    // 3. Start FIX TCP server
+    if (!fixServer_->start()) {
+        std::cerr << "Failed to start FIX TCP Server" << std::endl;
         matchingEngine_->stop();
         feedHandler_->stop();
         running_.store(false);
@@ -120,8 +126,8 @@ void Exchange::stop() {
         dummyGenerator_->stop();
     }
     
-    // 2. Stop ZMQ server (stops accepting new connections)
-    zmqServer_->stop();
+    // 2. Stop FIX TCP server (stops accepting new connections)
+    fixServer_->stop();
     
     // 3. Stop matching engine (finish processing queued orders)
     matchingEngine_->stop();

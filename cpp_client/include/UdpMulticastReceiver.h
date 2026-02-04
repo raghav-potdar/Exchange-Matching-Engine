@@ -10,7 +10,7 @@
 #include <string>
 #include <atomic>
 
-#include "Protocol.h"
+#include "../include/Protocol.h"
 
 class UdpMulticastReceiver {
 public:

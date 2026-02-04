@@ -2,10 +2,10 @@
 
 This is a standalone C++20 client application that:
 
-- Connects to the exchange via **ZeroMQ DEALER** (order entry)
+- Connects to the exchange via **FIX over TCP** (order entry)
 - Subscribes to **UDP multicast** (market data)
 
-It reuses the protocol structs from the exchange project (`../include/Protocol.h`).
+It reuses the protocol structs and FIX helpers from the exchange project (`../include/Protocol.h`, `../include/FixMessage.h`).
 
 ## Build
 
@@ -21,8 +21,10 @@ cmake --build . -j
 ### Basic (connect + listen to multicast)
 
 ```bash
-./orderbook_client --host 127.0.0.1 --port 12345 --mcast-group 239.255.0.1 --mcast-port 12346 --id client1
+./orderbook_client --host 127.0.0.1 --port 12345 --mcast-group 239.255.0.1 --mcast-port 12346 --sender CLIENT --target EXCHANGE
 ```
+
+The client prints both binary market data and FIX W/X messages if the exchange is configured to publish them.
 
 ### Send a demo order on startup
 

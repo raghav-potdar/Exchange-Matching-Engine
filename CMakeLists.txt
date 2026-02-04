@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(Orderbook)
+project(Exchange-Matching-Engine)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,26 +69,26 @@ message(STATUS "Found source files: ${SOURCES}")
 message(STATUS "Found header files: ${HEADERS}")
 
 # Create executable with all discovered source files
-add_executable(orderbook ${SOURCES} ${HEADERS})
+add_executable(exchange ${SOURCES} ${HEADERS})
 
 # Include directories for the target
-target_include_directories(orderbook PRIVATE 
+target_include_directories(exchange PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${cppzmq_SOURCE_DIR}
 )
 
 # Link libraries
-target_link_libraries(orderbook PRIVATE 
+target_link_libraries(exchange PRIVATE 
     Threads::Threads
     libzmq-static
 )
 
 # Compiler options
-target_compile_options(orderbook PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(exchange PRIVATE -Wall -Wextra -Wpedantic)
 
 # Sanitizers (optional - comment out for production builds)
 option(ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 if(ENABLE_SANITIZERS)
-    target_compile_options(orderbook PRIVATE -fsanitize=address -fsanitize=undefined)
-    target_link_options(orderbook PRIVATE -fsanitize=address -fsanitize=undefined)
+    target_compile_options(exchange PRIVATE -fsanitize=address -fsanitize=undefined)
+    target_link_options(exchange PRIVATE -fsanitize=address -fsanitize=undefined)
 endif()

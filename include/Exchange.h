@@ -20,7 +20,7 @@
 #include "Protocol.h"
 #include "LockFreeQueue.h"
 #include "SessionManager.h"
-#include "ZmqServer.h"
+#include "FixTcpServer.h"
 #include "MatchingEngine.h"
 #include "FeedHandler.h"
 #include "DummyGenerator.h"
@@ -33,10 +33,13 @@
  * ports, multicast settings, symbol configuration, and dummy generator options.
  */
 struct ExchangeConfiguration {
-    uint16_t zmqPort{ExchangeConfig::TCP_PORT};  ///< ZMQ ROUTER port for client connections
+    uint16_t fixPort{ExchangeConfig::TCP_PORT};  ///< FIX TCP port for client connections
     std::string multicastGroup{ExchangeConfig::MULTICAST_GROUP};  ///< UDP multicast group address
     uint16_t multicastPort{ExchangeConfig::MULTICAST_PORT};  ///< UDP multicast port
     std::string symbol{ExchangeConfig::DEFAULT_SYMBOL};  ///< Trading symbol
+    bool publishFixMarketData{true};  ///< Also publish FIX W/X over UDP multicast
+    std::string mdSenderCompId{"EXCHANGE"};  ///< FIX SenderCompID for market data
+    std::string mdTargetCompId{"MD"};  ///< FIX TargetCompID for market data
     bool enableDummyGenerator{false};  ///< Enable dummy order generator for testing
     DummyGeneratorConfig dummyConfig;  ///< Dummy generator configuration
 };
@@ -46,14 +49,14 @@ struct ExchangeConfiguration {
  * @brief Main exchange coordinator that manages all subsystems.
  * 
  * The Exchange class orchestrates the following components:
- * - ZmqServer: Handles client connections via ZeroMQ ROUTER socket
+ * - FixTcpServer: Handles client connections via FIX over TCP
  * - SessionManager: Tracks client sessions and routes messages
  * - MatchingEngine: Processes orders and executes trades
  * - FeedHandler: Publishes market data via UDP multicast
  * - DummyGenerator: (Optional) Generates test orders
  * 
  * @par Threading Model
- * - Network Thread: ZMQ server event loop
+ * - Network Thread: FIX TCP server event loop
  * - Matching Thread: Single-threaded order matching
  * - Feed Thread: Market data publishing
  * - Dummy Generator Thread: (Optional) Test order generation
@@ -61,7 +64,7 @@ struct ExchangeConfiguration {
  * @par Example Usage
  * @code
  * ExchangeConfiguration config;
- * config.zmqPort = 12345;
+ * config.fixPort = 12345;
  * config.enableDummyGenerator = true;
  * 
  * Exchange exchange(config);
@@ -154,7 +157,7 @@ private:
     std::unique_ptr<FeedQueue> feedQueue_;
     
     std::unique_ptr<SessionManager> sessionManager_;
-    std::unique_ptr<ZmqServer> zmqServer_;
+    std::unique_ptr<FixTcpServer> fixServer_;
     std::unique_ptr<MatchingEngine> matchingEngine_;
     std::unique_ptr<FeedHandler> feedHandler_;
     std::unique_ptr<DummyGenerator> dummyGenerator_;

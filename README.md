@@ -1,6 +1,6 @@
 # Exchange Matching Engine
 
-A high-performance exchange matching engine with orderbook implementation in C++20. Features ZeroMQ-based client connectivity, UDP multicast market data distribution, and a price-time priority matching algorithm.
+A high-performance exchange matching engine with orderbook implementation in C++20. Features FIX-over-TCP client connectivity, UDP multicast market data distribution, and a price-time priority matching algorithm.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ A high-performance exchange matching engine with orderbook implementation in C++
                     │         │                  ▼                               │
 ┌──────────┐        │  ┌─────────────┐    ┌──────────────┐    ┌───────────────┐  │
 │  Client  │◀──────▶│  │   Session   │◀──▶│   Outbound   │    │     Feed      │  │
-│ (DEALER) │  ZMQ   │  │   Manager   │    │    Queue     │    │    Handler    │  │
+│ (FIXTCP) │  TCP   │  │   Manager   │    │    Queue     │    │    Handler    │  │
 └──────────┘ ROUTER │  └─────────────┘    └──────────────┘    └───────────────┘  │
                     │                                                │            │
                     │                                                ▼            │
@@ -32,8 +32,9 @@ A high-performance exchange matching engine with orderbook implementation in C++
 
 - **Price-Time Priority Matching**: Standard exchange matching algorithm
 - **Order Types**: LIMIT, MARKET, IOC (Immediate-Or-Cancel)
-- **ZeroMQ Connectivity**: ROUTER/DEALER pattern for client order entry
+- **FIX over TCP**: FIX session + order flow for client order entry
 - **UDP Multicast**: Low-latency market data distribution
+- **FIX Market Data**: Optional FIX W/X messages over multicast
 - **Lock-Free Queues**: High-performance inter-thread communication
 - **Session Management**: Automatic order cancellation on disconnect
 - **Dummy Generator**: Built-in order generator for testing
@@ -51,7 +52,7 @@ A high-performance exchange matching engine with orderbook implementation in C++
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd Orderbook
+cd Exchange-Matching-Engine
 
 # Create build directory
 mkdir build && cd build
@@ -61,7 +62,7 @@ cmake ..
 make -j$(nproc)
 
 # Run the exchange
-./orderbook --dummy
+./exchange --dummy
 ```
 
 ### Build Options
@@ -74,13 +75,17 @@ cmake -DENABLE_SANITIZERS=ON ..
 ## Usage
 
 ```bash
-./orderbook [options]
+./exchange [options]
 
 Options:
   --help, -h              Show help message
-  --port <port>           ZMQ ROUTER port for order entry (default: 12345)
+  --fix-port <port>       FIX TCP port for order entry (default: 12345)
+  --port <port>           Alias for --fix-port
   --mcast-group <ip>      Multicast group address (default: 239.255.0.1)
   --mcast-port <port>     Multicast port (default: 12346)
+  --no-fix-md             Disable FIX W/X market data on multicast
+  --md-sender <compId>    Market data SenderCompID (default: EXCHANGE)
+  --md-target <compId>    Market data TargetCompID (default: MD)
   --symbol <symbol>       Trading symbol (default: SYM1)
   --dummy                 Enable dummy order generator
   --dummy-rate <n>        Dummy orders per second (default: 10)
@@ -90,42 +95,36 @@ Options:
 
 ```bash
 # Start exchange with dummy order generator at 20 orders/second
-./orderbook --dummy --dummy-rate 20 --port 12345
+./exchange --dummy --dummy-rate 20 --fix-port 12345
 ```
 
 ## Network Protocol
 
-### Order Entry (ZeroMQ ROUTER/DEALER)
+### Order Entry (FIX over TCP)
 
-Clients connect using ZeroMQ DEALER sockets to `tcp://<host>:<port>`.
+Clients connect using FIX over TCP to `tcp://<host>:<fix-port>`.
 
-**Message Format**: Binary packed structs (see `Protocol.h`)
-
-| Message Type | Direction | Description |
-|--------------|-----------|-------------|
-| `NewOrderRequest` | Client → Exchange | Submit new order |
-| `CancelOrderRequest` | Client → Exchange | Cancel existing order |
-| `ModifyOrderRequest` | Client → Exchange | Modify existing order |
-| `OrderAck` | Exchange → Client | Order accepted |
-| `OrderReject` | Exchange → Client | Order rejected |
-| `ExecutionReport` | Exchange → Client | Trade execution |
-| `CancelAck` | Exchange → Client | Cancel confirmed |
-| `ModifyAck` | Exchange → Client | Modify confirmed |
+**Message Types**: Logon/Logout/Heartbeat/TestRequest/ResendRequest/SequenceReset plus
+`NewOrderSingle (D)`, `OrderCancelRequest (F)`, `OrderCancelReplaceRequest (G)`,
+`ExecutionReport (8)`, `OrderCancelReject (9)`.
 
 ### Market Data (UDP Multicast)
 
-Clients subscribe to the multicast group to receive market data.
+Clients subscribe to the multicast group to receive market data. The feed includes
+the existing binary messages and optional FIX W/X payloads.
 
 | Message Type | Description |
 |--------------|-------------|
-| `TickUpdate` | Best bid/ask and last trade |
-| `TradeUpdate` | Individual trade details |
-| `OrderbookSnapshot` | Top 5 levels of orderbook |
+| `TickUpdate` | Best bid/ask and last trade (binary) |
+| `TradeUpdate` | Individual trade details (binary) |
+| `OrderbookSnapshot` | Top 5 levels of orderbook (binary) |
+| `MarketDataIncrementalRefresh (X)` | FIX incremental updates |
+| `MarketDataSnapshotFullRefresh (W)` | FIX snapshot |
 
 ## Project Structure
 
 ```
-Orderbook/
+Exchange-Matching-Engine/
 ├── CMakeLists.txt          # Build configuration
 ├── README.md               # This file
 ├── include/
@@ -135,11 +134,12 @@ Orderbook/
 │   ├── MatchingEngine.h    # Order matching logic
 │   ├── Orderbook.h         # Price-time priority orderbook
 │   ├── Order.h             # Order class
-│   ├── ZmqServer.h         # ZeroMQ ROUTER server
+│   ├── FixTcpServer.h      # FIX TCP server
 │   ├── SessionManager.h    # Client session tracking
 │   ├── FeedHandler.h       # Market data publisher
 │   ├── DummyGenerator.h    # Test order generator
 │   ├── UdpMulticast.h      # UDP multicast publisher
+│   ├── FixMessage.h        # FIX message parsing/serialization
 │   ├── Usings.h            # Type aliases
 │   └── define.h            # Enums (BuySell, OrderType, etc.)
 └── src/
@@ -147,35 +147,19 @@ Orderbook/
     ├── Exchange.cpp
     ├── MatchingEngine.cpp
     ├── Orderbook.cpp
-    ├── ZmqServer.cpp
+    ├── FixTcpServer.cpp
     ├── FeedHandler.cpp
     ├── DummyGenerator.cpp
     └── UdpMulticast.cpp
 ```
 
-## Client Example (Python)
+## Client Example (C++)
 
-```python
-import zmq
-import struct
-
-# Connect to exchange
-context = zmq.Context()
-socket = context.socket(zmq.DEALER)
-socket.setsockopt(zmq.IDENTITY, b"client1")
-socket.connect("tcp://localhost:12345")
-
-# Send a new order (simplified - see Protocol.h for full format)
-# ... pack binary message according to NewOrderRequest struct ...
-
-# Receive response
-response = socket.recv()
-# ... unpack binary response ...
-```
+See `cpp_client/` for a FIX TCP order entry client with multicast market data.
 
 ## Threading Model
 
-- **Network Thread**: ZMQ server event loop, session management
+- **Network Thread**: FIX TCP server event loop, session management
 - **Matching Thread**: Single-threaded order matching (deterministic)
 - **Feed Thread**: Market data formatting and UDP multicast
 - **Dummy Generator Thread**: (Optional) Test order generation

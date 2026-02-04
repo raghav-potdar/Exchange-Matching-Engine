@@ -28,13 +28,13 @@
  */
 struct SessionInfo {
     SessionId sessionId;                        ///< Unique session identifier
-    std::string zmqIdentity;                    ///< ZMQ client identity
+    std::string connectionId;                  ///< Connection identifier
     bool isActive;                              ///< Whether session is active
     std::unordered_set<OrderId> activeOrders;   ///< Orders owned by this session
     
     SessionInfo() : sessionId(INVALID_SESSION_ID), isActive(false) {}
-    SessionInfo(SessionId id, const std::string& identity) 
-        : sessionId(id), zmqIdentity(identity), isActive(true) {}
+    SessionInfo(SessionId id, const std::string& identity)
+        : sessionId(id), connectionId(identity), isActive(true) {}
 };
 
 /**
@@ -43,7 +43,7 @@ struct SessionInfo {
  * 
  * The SessionManager:
  * - Creates and destroys client sessions
- * - Maps ZMQ identities to session IDs
+ * - Maps connection identifiers to session IDs
  * - Tracks which orders belong to which session
  * - Routes inbound messages to the matching engine
  * - Routes outbound messages to the correct client
@@ -67,10 +67,10 @@ public:
     
     /**
      * @brief Create a new session for a client.
-     * @param zmqIdentity Client's ZMQ identity.
+     * @param connectionId Client connection identifier.
      * @return Assigned session ID.
      */
-    SessionId createSession(const std::string& zmqIdentity);
+    SessionId createSession(const std::string& connectionId);
     
     /**
      * @brief Destroy a session and trigger disconnect callback.
@@ -86,9 +86,9 @@ public:
     bool isSessionActive(SessionId sessionId) const;
     
     /**
-     * @brief Get ZMQ identity for a session.
+     * @brief Get connection identifier for a session.
      * @param sessionId Session ID.
-     * @return ZMQ identity string, empty if not found.
+     * @return Connection identifier string, empty if not found.
      */
     std::string getIdentity(SessionId sessionId) const;
     
@@ -133,18 +133,18 @@ inline SessionManager::SessionManager(InboundQueue& inboundQueue, OutboundQueue&
 {
 }
 
-inline SessionId SessionManager::createSession(const std::string& zmqIdentity) {
+inline SessionId SessionManager::createSession(const std::string& connectionId) {
     std::lock_guard<std::mutex> lock(sessionMutex_);
     
     // Check if this identity already has a session
-    auto existingIt = identityToSession_.find(zmqIdentity);
+    auto existingIt = identityToSession_.find(connectionId);
     if (existingIt != identityToSession_.end()) {
         return existingIt->second;  // Return existing session
     }
     
     SessionId sessionId = nextSessionId_.fetch_add(1);
-    sessions_.emplace(sessionId, SessionInfo(sessionId, zmqIdentity));
-    identityToSession_[zmqIdentity] = sessionId;
+    sessions_.emplace(sessionId, SessionInfo(sessionId, connectionId));
+    identityToSession_[connectionId] = sessionId;
     
     return sessionId;
 }
@@ -164,7 +164,7 @@ inline void SessionManager::destroySession(SessionId sessionId) {
         session.isActive = false;
         ordersToCancel = std::move(session.activeOrders);
         
-        identityToSession_.erase(session.zmqIdentity);
+        identityToSession_.erase(session.connectionId);
         sessions_.erase(it);
     }
     
@@ -188,7 +188,7 @@ inline std::string SessionManager::getIdentity(SessionId sessionId) const {
     if (it == sessions_.end()) {
         return "";
     }
-    return it->second.zmqIdentity;
+    return it->second.connectionId;
 }
 
 inline void SessionManager::addOrderToSession(SessionId sessionId, OrderId orderId) {

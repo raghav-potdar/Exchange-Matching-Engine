@@ -8,9 +8,13 @@ void printUsage(const char* programName) {
     std::cout << "Usage: " << programName << " [options]\n"
               << "\nOptions:\n"
               << "  --help, -h              Show this help message\n"
-              << "  --port <port>           ZMQ ROUTER port for order entry (default: 12345)\n"
+              << "  --fix-port <port>       FIX TCP port for order entry (default: 12345)\n"
+              << "  --port <port>           Alias for --fix-port\n"
               << "  --mcast-group <ip>      Multicast group address (default: 239.255.0.1)\n"
               << "  --mcast-port <port>     Multicast port (default: 12346)\n"
+              << "  --no-fix-md             Disable FIX W/X market data on multicast\n"
+              << "  --md-sender <compId>    Market data SenderCompID (default: EXCHANGE)\n"
+              << "  --md-target <compId>    Market data TargetCompID (default: MD)\n"
               << "  --symbol <symbol>       Trading symbol (default: SYM1)\n"
               << "  --dummy                 Enable dummy order generator\n"
               << "  --dummy-rate <n>        Dummy orders per second (default: 10)\n"
@@ -27,12 +31,18 @@ int main(int argc, char* argv[]) {
         if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
             return 0;
-        } else if (arg == "--port" && i + 1 < argc) {
-            config.zmqPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if ((arg == "--fix-port" || arg == "--port") && i + 1 < argc) {
+            config.fixPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--mcast-group" && i + 1 < argc) {
             config.multicastGroup = argv[++i];
         } else if (arg == "--mcast-port" && i + 1 < argc) {
             config.multicastPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--no-fix-md") {
+            config.publishFixMarketData = false;
+        } else if (arg == "--md-sender" && i + 1 < argc) {
+            config.mdSenderCompId = argv[++i];
+        } else if (arg == "--md-target" && i + 1 < argc) {
+            config.mdTargetCompId = argv[++i];
         } else if (arg == "--symbol" && i + 1 < argc) {
             config.symbol = argv[++i];
         } else if (arg == "--dummy") {

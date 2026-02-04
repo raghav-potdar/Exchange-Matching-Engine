@@ -46,10 +46,13 @@ public:
      * @param multicastPort UDP multicast port.
      * @param symbol Trading symbol for this feed.
      */
-    FeedHandler(FeedQueue& feedQueue, 
-                const std::string& multicastGroup, 
+    FeedHandler(FeedQueue& feedQueue,
+                const std::string& multicastGroup,
                 uint16_t multicastPort,
-                const std::string& symbol);
+                const std::string& symbol,
+                bool publishFixMarketData,
+                const std::string& mdSenderCompId,
+                const std::string& mdTargetCompId);
     
     /**
      * @brief Destructor. Stops feed thread if running.
@@ -110,11 +113,18 @@ public:
 private:
     void feedLoop();
     void processMessage(const MarketDataMessage& msg);
+    void publishFixIncremental(const MarketDataMessage& msg);
+    void publishFixSnapshot(const MarketDataMessage& msg);
+    std::string currentUtcTimestamp() const;
     
 private:
     FeedQueue& feedQueue_;
     UdpMulticast multicast_;
     std::string symbol_;
+    bool publishFixMarketData_{false};
+    std::string mdSenderCompId_;
+    std::string mdTargetCompId_;
+    std::atomic<uint64_t> fixSeq_{1};
     
     std::atomic<bool> running_{false};
     std::thread feedThread_;

@@ -1,15 +1,27 @@
 #include "FeedHandler.h"
+#include "FixMessage.h"
 
 #include <iostream>
 #include <cstring>
+#include <vector>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 
 FeedHandler::FeedHandler(FeedQueue& feedQueue,
                          const std::string& multicastGroup,
                          uint16_t multicastPort,
-                         const std::string& symbol)
+                         const std::string& symbol,
+                         bool publishFixMarketData,
+                         const std::string& mdSenderCompId,
+                         const std::string& mdTargetCompId)
     : feedQueue_(feedQueue)
     , multicast_(multicastGroup, multicastPort)
     , symbol_(symbol)
+    , publishFixMarketData_(publishFixMarketData)
+    , mdSenderCompId_(mdSenderCompId)
+    , mdTargetCompId_(mdTargetCompId)
 {
 }
 
@@ -71,21 +83,128 @@ void FeedHandler::processMessage(const MarketDataMessage& msg) {
             if (multicast_.publishTick(msg.tick)) {
                 ticksPublished_.fetch_add(1, std::memory_order_relaxed);
             }
+            if (publishFixMarketData_) {
+                publishFixIncremental(msg);
+            }
             break;
             
         case MessageType::TRADE_UPDATE:
             if (multicast_.publishTrade(msg.trade)) {
                 tradesPublished_.fetch_add(1, std::memory_order_relaxed);
             }
+            if (publishFixMarketData_) {
+                publishFixIncremental(msg);
+            }
             break;
             
         case MessageType::ORDERBOOK_SNAPSHOT:
             multicast_.publishSnapshot(msg.snapshot);
+            if (publishFixMarketData_) {
+                publishFixSnapshot(msg);
+            }
             break;
             
         default:
             break;
     }
+}
+
+void FeedHandler::publishFixIncremental(const MarketDataMessage& msg) {
+    FixMessage fix;
+    fix.set(35, "X");
+    fix.set(49, mdSenderCompId_);
+    fix.set(56, mdTargetCompId_);
+    fix.set(34, std::to_string(fixSeq_.fetch_add(1)));
+    fix.set(52, currentUtcTimestamp());
+    fix.set(55, symbol_);
+
+    std::vector<FixField> entries;
+    size_t entryCount = 0;
+    if (msg.type == MessageType::TICK_UPDATE) {
+        const TickUpdate& t = msg.tick;
+        entries.push_back({279, "1"});  // Change
+        entries.push_back({269, "0"});
+        entries.push_back({270, std::to_string(t.bidPrice)});
+        entries.push_back({271, std::to_string(t.bidQty)});
+        entryCount++;
+
+        entries.push_back({279, "1"});  // Change
+        entries.push_back({269, "1"});
+        entries.push_back({270, std::to_string(t.askPrice)});
+        entries.push_back({271, std::to_string(t.askQty)});
+        entryCount++;
+
+        if (t.lastQty > 0) {
+            entries.push_back({279, "0"});
+            entries.push_back({269, "2"});
+            entries.push_back({270, std::to_string(t.lastPrice)});
+            entries.push_back({271, std::to_string(t.lastQty)});
+            entryCount++;
+        }
+    } else if (msg.type == MessageType::TRADE_UPDATE) {
+        const TradeUpdate& t = msg.trade;
+        entries.push_back({279, "0"});
+        entries.push_back({269, "2"});
+        entries.push_back({270, std::to_string(t.price)});
+        entries.push_back({271, std::to_string(t.quantity)});
+        entryCount++;
+    }
+
+    if (entries.empty()) {
+        return;
+    }
+
+    fix.set(268, std::to_string(entryCount));
+    for (const auto& field : entries) {
+        fix.set(field.tag, field.value);
+    }
+
+    std::string raw = fix.serialize("FIXT.1.1");
+    multicast_.publish(raw.data(), raw.size());
+}
+
+void FeedHandler::publishFixSnapshot(const MarketDataMessage& msg) {
+    const OrderbookSnapshot& s = msg.snapshot;
+    FixMessage fix;
+    fix.set(35, "W");
+    fix.set(49, mdSenderCompId_);
+    fix.set(56, mdTargetCompId_);
+    fix.set(34, std::to_string(fixSeq_.fetch_add(1)));
+    fix.set(52, currentUtcTimestamp());
+    fix.set(55, symbol_);
+
+    size_t totalEntries = static_cast<size_t>(s.bidLevels + s.askLevels);
+    fix.set(268, std::to_string(totalEntries));
+
+    for (size_t i = 0; i < s.bidLevels; ++i) {
+        fix.set(269, "0");
+        fix.set(270, std::to_string(s.bids[i].price));
+        fix.set(271, std::to_string(s.bids[i].quantity));
+    }
+    for (size_t i = 0; i < s.askLevels; ++i) {
+        fix.set(269, "1");
+        fix.set(270, std::to_string(s.asks[i].price));
+        fix.set(271, std::to_string(s.asks[i].quantity));
+    }
+
+    std::string raw = fix.serialize("FIXT.1.1");
+    multicast_.publish(raw.data(), raw.size());
+}
+
+std::string FeedHandler::currentUtcTimestamp() const {
+    using namespace std::chrono;
+    auto now = system_clock::now();
+    auto secs = time_point_cast<seconds>(now);
+    auto ms = duration_cast<milliseconds>(now - secs).count();
+
+    std::time_t t = system_clock::to_time_t(now);
+    std::tm tm{};
+    gmtime_r(&t, &tm);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y%m%d-%H:%M:%S");
+    oss << "." << std::setw(3) << std::setfill('0') << ms;
+    return oss.str();
 }
 
 void FeedHandler::publishTick(Price lastPrice, Quantity lastQty,
