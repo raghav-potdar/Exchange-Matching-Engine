@@ -68,19 +68,19 @@ void FeedHandler::feedLoop() {
 void FeedHandler::processMessage(const MarketDataMessage& msg) {
     switch (msg.type) {
         case MessageType::TICK_UPDATE:
-            if (multicast_.publishTick(msg.tick)) {
+            if (multicast_.publishMessage(msg.tick)) {
                 ticksPublished_.fetch_add(1, std::memory_order_relaxed);
             }
             break;
             
         case MessageType::TRADE_UPDATE:
-            if (multicast_.publishTrade(msg.trade)) {
+            if (multicast_.publishMessage(msg.trade)) {
                 tradesPublished_.fetch_add(1, std::memory_order_relaxed);
             }
             break;
             
         case MessageType::ORDERBOOK_SNAPSHOT:
-            multicast_.publishSnapshot(msg.snapshot);
+            multicast_.publishMessage(msg.snapshot);
             break;
             
         default:

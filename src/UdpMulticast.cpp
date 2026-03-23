@@ -87,14 +87,7 @@ bool UdpMulticast::publish(const void* data, size_t length) {
     return true;
 }
 
-bool UdpMulticast::publishTick(const TickUpdate& tick) {
-    return publish(&tick, sizeof(tick));
-}
-
-bool UdpMulticast::publishTrade(const TradeUpdate& trade) {
-    return publish(&trade, sizeof(trade));
-}
-
-bool UdpMulticast::publishSnapshot(const OrderbookSnapshot& snapshot) {
-    return publish(&snapshot, sizeof(snapshot));
+template<typename PublishType>
+bool UdpMulticast::publishMessage(const PublishType& message) {
+    return publish(&message, sizeof(message));
 }
