@@ -32,7 +32,7 @@
  * UdpMulticast publisher("239.255.0.1", 12346);
  * if (publisher.initialize()) {
  *     TickUpdate tick = {...};
- *     publisher.publishTick(tick);
+ *     publisher.publishMessage(tick);
  * }
  * @endcode
  */
@@ -60,36 +60,15 @@ public:
      * @brief Shutdown and close the socket.
      */
     void shutdown();
-    
+
     /**
-     * @brief Publish raw data to multicast group.
-     * @param data Pointer to data buffer.
-     * @param length Length of data in bytes.
+     * @brief Publish an arbitrary message.
+     * @param message Message to send.
      * @return true if sent successfully.
      */
-    bool publish(const void* data, size_t length);
-    
-    /**
-     * @brief Publish a tick update message.
-     * @param tick TickUpdate message to send.
-     * @return true if sent successfully.
-     */
-    bool publishTick(const TickUpdate& tick);
-    
-    /**
-     * @brief Publish a trade update message.
-     * @param trade TradeUpdate message to send.
-     * @return true if sent successfully.
-     */
-    bool publishTrade(const TradeUpdate& trade);
-    
-    /**
-     * @brief Publish an orderbook snapshot.
-     * @param snapshot OrderbookSnapshot message to send.
-     * @return true if sent successfully.
-     */
-    bool publishSnapshot(const OrderbookSnapshot& snapshot);
-    
+    template<typename PublishType>
+    bool publishMessage(const PublishType& message);
+
     /**
      * @brief Get count of messages sent.
      * @return Total messages sent since initialization.
@@ -109,6 +88,14 @@ private:
     
     std::atomic<uint64_t> messagesSent_{0};
     std::atomic<uint64_t> bytesSent_{0};
+
+    /**
+     * @brief Publish raw data to multicast group.
+     * @param data Pointer to data buffer.
+     * @param length Length of data in bytes.
+     * @return true if sent successfully.
+     */
+    bool publish(const void* data, size_t length);
 };
 
 #endif // UDPMULTICAST_H
